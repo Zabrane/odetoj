@@ -1,214 +1,35 @@
+// https://github.com/zserge/odetoj/blob/master/src/main.rs
+
 use std::collections::HashMap;
 use std::io::BufRead;
 
-#[derive(Debug, Clone)]
-struct Array {
-    depth: Vec<i64>,
-    data: Vec<Element>,
-}
+type A = Vec<E>;
 
 #[derive(Debug, Clone)]
-enum Element {
-    Array(Array),
-    Number(i64),
+enum E {Number(i64)}
+
+fn array_from_i64(n: i64) -> A {vec![E::Number(n)]}
+
+fn iota(a: A) -> A {
+    if let E::Number(n) = a[0] {(0..n).map(|i| E::Number(i)).collect()}
+    else {array_from_i64(0)}
 }
 
-impl Element {
-    fn to_i64(&self) -> i64 {
-        if let Element::Number(n) = self {
-            *n
-        } else {
-            0
-        }
-    }
+fn at(a: &A, i: i64) -> i64 {
+    if (i as usize) < a.len() {
+        match a[i as usize] {E::Number(n) => n}}
+    else {0}
 }
+
+fn plus(a: A, b: A) -> A {
+    a.iter().zip(&b).map(|(E::Number(e),E::Number(f))| E::Number(e + f)).collect()
+// (0..b.depth.len() as i64).map(|i| E::Number(at(&a, i) + at(&b, i))).collect(),
+}
+
+// Interpreter
 
 #[derive(Debug, PartialEq)]
-enum Token {
-    Number(i64),
-    Variable(String),
-    Verb(char),
-}
-
-fn tr(d: &[i64]) -> i64 {
-    let mut z = 1;
-    for x in d {
-        z = z * x;
-    }
-    z
-}
-
-fn boxed(a: &Array) -> bool {
-    a.data.iter().any(|x| match x {
-        Element::Array(_) => true,
-        _ => false,
-    })
-}
-
-impl std::fmt::Display for Array {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        for d in &self.depth {
-            write!(f, "{} ", d);
-        }
-        write!(f, "\n")?;
-        for el in &self.data {
-            match el {
-                Element::Array(arr) => write!(f, "< {} ", arr),
-                Element::Number(n) => write!(f, "{} ", n),
-            };
-        }
-        write!(f, "\n")?;
-        Ok(())
-    }
-}
-
-fn array_from_i64(n: i64) -> Array {
-    Array {
-        depth: vec![],
-        data: vec![Element::Number(n)],
-    }
-}
-
-fn id(a: Array) -> Array {
-    a
-}
-
-fn size(a: Array) -> Array {
-    array_from_i64(if boxed(&a) { a.depth[0] } else { 1 })
-}
-
-fn iota(a: Array) -> Array {
-    if let Element::Number(n) = a.data[0] {
-        Array {
-            depth: vec![n],
-            data: (0..n).map(|i| Element::Number(i)).collect(),
-        }
-    } else {
-        array_from_i64(0)
-    }
-}
-
-fn boxing(a: Array) -> Array {
-    Array {
-        depth: vec![],
-        data: vec![Element::Array(a)],
-    }
-}
-
-fn sha(a: Array) -> Array {
-    Array {
-        depth: vec![a.depth.len() as i64],
-        data: a.depth.iter().map(|&d| Element::Number(d)).collect(),
-    }
-}
-
-fn at(a: &Array, i: i64) -> i64 {
-    if (i as usize) < a.data.len() {
-        a.data[i as usize].to_i64()
-    } else {
-        0
-    }
-}
-
-fn plus(a: Array, b: Array) -> Array {
-    Array {
-        depth: b.depth.clone(),
-        data: (0..b.depth.len() as i64)
-            .map(|i| Element::Number(at(&a, i) + at(&b, i)))
-            .collect(),
-    }
-}
-
-fn from(a: Array, b: Array) -> Array {
-    let n = tr(&b.depth[1..]);
-    Array {
-        depth: b.depth[1..].to_vec(),
-        data: (0..n)
-            .map(|i| b.data[(i + n * at(&a, 0)) as usize].clone())
-            .collect(),
-    }
-}
-
-fn rsh(a: Array, b: Array) -> Array {
-    let n = if a.depth.len() as i64 == 0 {
-        at(&a, 0)
-    } else {
-        let depth: Vec<i64> = (0..a.depth[0]).map(|i| at(&a, i)).collect();
-        tr(&depth)
-    };
-    Array {
-        depth: a.data.iter().map(|x| x.to_i64()).collect(),
-        data: b
-            .data
-            .iter()
-            .cycle()
-            .take(n as usize)
-            .map(|x| x.clone())
-            .collect(),
-    }
-}
-
-fn cat(a: Array, b: Array) -> Array {
-    let an = tr(&a.depth);
-    let bn = tr(&b.depth);
-    let n = an + bn;
-    Array {
-        depth: vec![n as i64],
-        data: (0..n)
-            .map(|i| {
-                if i < an {
-                    a.data[i as usize].clone()
-                } else {
-                    b.data[(i - an) as usize].clone()
-                }
-            })
-            .collect(),
-    }
-}
-
-fn eval(tokens: &[Token], env: &mut HashMap<String, Array>) -> Result<Array, String> {
-    if let Some((head, tail)) = tokens.split_first() {
-        let a: Array = if let Token::Variable(var) = head {
-            if let Some((Token::Verb('='), expr)) = tail.split_first() {
-                let val = eval(expr, env)?;
-                env.insert(var.to_string(), val.clone());
-                return Ok(val);
-            }
-            env.entry(var.to_string())
-                .or_insert(array_from_i64(0))
-                .clone()
-        } else if let Token::Number(num) = head {
-            array_from_i64(*num)
-        } else {
-            array_from_i64(0)
-        };
-
-        if let Token::Verb(verb) = head {
-            let x = eval(tail, env)?;
-            match verb {
-                '+' => Ok(id(x)),
-                '{' => Ok(size(x)),
-                '~' => Ok(iota(x)),
-                '<' => Ok(boxing(x)),
-                '#' => Ok(sha(x)),
-                _ => return Err(format!("unknown monadic verb: {}", verb)),
-            }
-        } else if let Some((Token::Verb(verb), expr)) = tail.split_first() {
-            let b = eval(expr, env)?;
-            match verb {
-                '+' => Ok(plus(a, b)),
-                '{' => Ok(from(a, b)),
-                '#' => Ok(rsh(a, b)),
-                ',' => Ok(cat(a, b)),
-                _ => return Err(format!("unknown dyadic verb: {}", verb)),
-            }
-        } else {
-            Ok(a)
-        }
-    } else {
-        Ok(array_from_i64(0))
-    }
-}
+enum Token {Number(i64), Variable(String), Verb(char)}
 
 fn parse(s: &str) -> Result<Vec<Token>, String> {
     let mut result = Vec::new();
@@ -217,25 +38,48 @@ fn parse(s: &str) -> Result<Vec<Token>, String> {
         let mut lex = |f: fn(char) -> bool| {
             let mut s = String::from("");
             while let Some(&x) = it.peek() {
-                if !f(x) {
-                    break;
-                }
+                if !f(x) {break}
                 s.push(it.by_ref().next().unwrap())
             }
             return s;
         };
         match c {
-            '0'...'9' => {
-                result.push(Token::Number(
-                    lex(|c| c >= '0' && c <= '9').parse::<i64>().unwrap(),
-                ));
-            }
-            'a'...'z' => result.push(Token::Variable(lex(|c| c >= 'a' && c <= 'z'))),
-            '+' | '{' | '~' | '<' | '#' | ',' | '=' => result.push(Token::Verb(it.next().unwrap())),
+            '0'..='9' => {result.push(Token::Number(lex(|c| c >= '0' && c <= '9').parse::<i64>().unwrap(),))}
+            'a'..='z' => result.push(Token::Variable(lex(|c| c >= 'a' && c <= 'z'))),
+            '+' | '^' => result.push(Token::Verb(it.next().unwrap())),
             _ => return Err(format!("unexpected {}", &c)),
         }
     }
     Ok(result)
+}
+
+fn eval(tokens: &[Token], env: &mut HashMap<String, A>) -> Result<A, String> {
+    if let Some((head, tail)) = tokens.split_first() {
+        let a: A = if let Token::Variable(var) = head {
+            if let Some((Token::Verb('='), expr)) = tail.split_first() {
+                let val = eval(expr, env)?;
+                env.insert(var.to_string(), val.clone());
+                return Ok(val);
+            }
+            env.entry(var.to_string())
+                .or_insert(array_from_i64(0))
+                .clone()}
+        else if let Token::Number(num) = head {array_from_i64(*num)}
+        else {array_from_i64(0)};
+
+        if let Token::Verb(verb) = head {
+            let x = eval(tail, env)?;
+            match verb {
+                '^' => Ok(iota(x)),
+                _ => return Err(format!("unknown monadic verb: {}", verb)),
+            }} 
+        else if let Some((Token::Verb(verb), expr)) = tail.split_first() {
+            let b = eval(expr, env)?;
+            match verb {
+                '+' => Ok(plus(a, b)),
+                _ => return Err(format!("unknown dyadic verb: {}", verb)),}}
+        else {Ok(a)}
+    } else {Ok(array_from_i64(0))}
 }
 
 #[cfg(test)]
@@ -244,30 +88,18 @@ mod tests {
 
     #[test]
     fn test_eval() {
-        let mut env: HashMap<String, Array> = HashMap::new();
+        let mut env: HashMap<String, A> = HashMap::new();
         // Atoms
-        println!("{}", eval(&parse("").unwrap(), &mut env).unwrap());
-        println!("{}", eval(&parse("1").unwrap(), &mut env).unwrap());
-        println!("{}", eval(&parse("123").unwrap(), &mut env).unwrap());
-        println!("{}", eval(&parse("abc").unwrap(), &mut env).unwrap());
+        println!("{:?}", eval(&parse("").unwrap(), &mut env).unwrap());
+        println!("{:?}", eval(&parse("1").unwrap(), &mut env).unwrap());
+        println!("{:?}", eval(&parse("123").unwrap(), &mut env).unwrap());
+        println!("{:?}", eval(&parse("abc").unwrap(), &mut env).unwrap());
         // Monads
-        println!("{}", eval(&parse("+10").unwrap(), &mut env).unwrap());
-        println!("{}", eval(&parse("{10").unwrap(), &mut env).unwrap());
-        println!("{}", eval(&parse("<10").unwrap(), &mut env).unwrap());
-        println!("{}", eval(&parse("~10").unwrap(), &mut env).unwrap());
-        println!("{}", eval(&parse("#10").unwrap(), &mut env).unwrap());
+        println!("{:?}", eval(&parse("^10").unwrap(), &mut env).unwrap());
         // Dyads
-        println!("{}", eval(&parse("1+2").unwrap(), &mut env).unwrap());
-        println!("{}", eval(&parse("1,2,3").unwrap(), &mut env).unwrap());
-        println!("{}", eval(&parse("1{5,7,9").unwrap(), &mut env).unwrap());
-        println!("{}", eval(&parse("5#3,4").unwrap(), &mut env).unwrap());
-        println!("{}", eval(&parse("shp=2,3").unwrap(), &mut env).unwrap());
-        println!("{}", eval(&parse("shp#~10").unwrap(), &mut env).unwrap());
+        println!("{:?}", eval(&parse("1+2").unwrap(), &mut env).unwrap());
         // Variables
-        println!("{}", eval(&parse("a=3").unwrap(), &mut env).unwrap());
-        println!("{}", eval(&parse("b=4").unwrap(), &mut env).unwrap());
-        println!("{}", eval(&parse("d=1+c=a+b").unwrap(), &mut env).unwrap());
-        println!("{}", eval(&parse("d+c").unwrap(), &mut env).unwrap());
+        println!("{:?}", eval(&parse("d+c").unwrap(), &mut env).unwrap());
     }
 
     #[test]
@@ -277,19 +109,15 @@ mod tests {
         assert_eq!(parse("abc"), Ok(vec![Token::Variable("abc".to_string())]));
         assert_eq!(parse("1"), Ok(vec![Token::Number(1)]));
         assert_eq!(parse("123"), Ok(vec![Token::Number(123)]));
-        assert_eq!(
-            parse("1+2"),
-            Ok(vec![Token::Number(1), Token::Verb('+'), Token::Number(2)])
-        );
+        assert_eq!(parse("1+2"), Ok(vec![Token::Number(1), Token::Verb('+'), Token::Number(2)]));
         assert!(parse("1.2").is_err());
     }
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let mut env: HashMap<String, Array> = HashMap::new();
-    let stdin = std::io::stdin();
-    for line in stdin.lock().lines() {
-        println!("{}", eval(&parse(line?.as_str())?, &mut env)?);
+    let mut env: HashMap<String, A> = HashMap::new();
+    for line in std::io::stdin().lock().lines() {
+        println!("{:?}", eval(&parse(line?.as_str())?, &mut env)?);
     }
     Ok(())
 }
